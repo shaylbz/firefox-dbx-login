@@ -37,6 +37,21 @@
   <label for="gmailTimeoutMs">Gmail wait timeout (ms)</label>
   <input type="number" id="gmailTimeoutMs" min="5000" step="1000">
 
+  <h1 style="font-size:15px;margin-top:28px;">AWS access portal</h1>
+
+  <label for="awsAccount">AWS account name</label>
+  <input type="text" id="awsAccount" placeholder="dev-admin">
+  <div class="hint">The account row to expand on awsapps.com/start.</div>
+
+  <label for="awsRole">AWS role / permission set</label>
+  <input type="text" id="awsRole" placeholder="PowerUserAccess">
+  <div class="hint">The role link to click (opens the console).</div>
+
+  <div class="row">
+    <input type="checkbox" id="awsAutoStart">
+    <label for="awsAutoStart">Auto-run when the AWS access portal loads</label>
+  </div>
+
   <div class="row">
     <input type="checkbox" id="autoStart">
     <label for="autoStart">Auto-run when the Databricks login page loads</label>
@@ -44,6 +59,10 @@
   <div class="row">
     <input type="checkbox" id="hideGmailTab">
     <label for="hideGmailTab">Hide the temporary Gmail tab</label>
+  </div>
+  <div class="row">
+    <input type="checkbox" id="trashDbxEmail">
+    <label for="trashDbxEmail">Move the Databricks code email to Trash after reading it</label>
   </div>
   <div class="row">
     <input type="checkbox" id="showToast">

@@ -5,7 +5,7 @@
 
 (function () {
   function log(...args) {
-    console.log("[dbx-content]", ...args);
+    console.log("[definity-databricks]", ...args);
   }
 
   // --- status toast --------------------------------------------------------

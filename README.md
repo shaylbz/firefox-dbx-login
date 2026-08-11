@@ -1,7 +1,11 @@
-# Databricks Email-Code Auto Login (Firefox)
+# Definity Auto Login (Firefox + Chrome)
 
 Auto-fills the Databricks login email, waits for the verification-code email
 in Gmail, extracts the code, then fills and submits it. You do nothing.
+Also automates the AWS access portal (expand account, click role).
+
+Runs on **both Firefox and Chrome** from one shared codebase — see
+"Cross-browser build" below.
 
 ## How it works
 
@@ -40,13 +44,66 @@ Databricks page          background            hidden Gmail tab
 Temporary add-ons are removed when Firefox restarts. To make it permanent you
 must sign/package it (see "Making it permanent" below).
 
+## Install (temporary, for testing) — Chrome
+
+1. Build the Chrome folder (MV3): `./build-chrome.sh` → creates `build/chrome/`.
+2. Open `chrome://extensions`, enable **Developer mode** (top-right).
+3. Click **Load unpacked** and select the `build/chrome` folder.
+4. Open the extension's **options** (three-dot menu → Options, or the popup's
+   "Open options" link) and set the same values as above.
+
+You must be **logged into Gmail in the same Chrome profile** (same rule as
+Firefox).
+
+## Cross-browser build
+
+One shared codebase, two manifests:
+
+- **Firefox** loads the repo root directly. `manifest.json` is Manifest V2 with
+  a persistent background page.
+- **Chrome** loads `build/chrome/`, where `build-chrome.sh` copies the shared
+  files and renames `manifest.chrome.json` → `manifest.json` (Manifest V3 with
+  a `sw.js` service worker).
+
+The logic files are identical across browsers. Compatibility is handled by:
+
+- A one-line shim (top of `config.js`, and `popup.js`) that aliases Chrome's
+  `chrome` namespace to `browser`. Chrome's MV3 APIs are promise-based, so the
+  rest of the code is unchanged.
+- Feature detection in `background.js` for the three APIs that differ:
+  `action` vs `browserAction` (badge), `scripting.executeScript` vs
+  `tabs.executeScript` (injection), and `tabs.hide()` vs a minimized popup
+  window (the invisible Gmail tab).
+
+**The one behavior difference:** Firefox truly hides the Gmail tab
+(`tabs.hide()`). Chrome has no such API, so it opens Gmail in a **minimized,
+unfocused popup window** instead — as close to invisible as Chrome allows; it
+may briefly appear. Everything else behaves the same.
+
+Re-run `./build-chrome.sh` after editing any source file, then click the
+reload icon on the Chrome extensions page.
+
 ## Trying it
 
 - With auto-start on (default), just open the Databricks login page. It should
   fill, send, wait, and submit on its own.
 - Or click the toolbar button → **Run login now** to trigger manually.
 - Open the **Browser Console** (Ctrl+Shift+J) to watch the logs from all three
-  parts (`[dbx-content]`, `[dbx-bg]`, `[dbx-gmail]`).
+  parts (`[definity-databricks]`, `[definity-bg]`, `[definity-gmail]`).
+
+## AWS access portal (awsapps.com/start)
+
+A second automation, independent of the Databricks/Gmail flow. On the AWS
+access portal it expands a configured account and clicks a configured role
+(permission set), which opens the console.
+
+- Set **AWS account name** (default `dev-admin`) and **AWS role / permission
+  set** (default `PowerUserAccess`) in options.
+- With **Auto-run when the AWS access portal loads** on, it runs automatically
+  on `awsapps.com/start`. Or use the toolbar button → **Run login now**.
+- It matches the account and role **by visible text**, since the portal is a
+  React app with no stable ids. If a step fails, the console (`[definity-aws]`) logs
+  the clickable candidates so you can correct the text in options.
 
 ## Status indicators
 
@@ -83,12 +140,17 @@ I cannot see your real pages, so these selectors are best guesses:
 
 ## Notes and limits
 
+- **Trashing the code email:** with **Move the Databricks code email to Trash
+  after reading it** on (default), the scraper opens the newest matching email,
+  reads the code, then clicks Gmail's Delete (move-to-trash) button. This is
+  reversible — the email sits in Gmail's Trash and is recoverable for 30 days.
+  The extension never empties Trash or hard-deletes. Only the one email it read
+  the code from is trashed.
 - **Stale codes:** `newer_than:1h` plus "newest match first" avoids grabbing an
   old code. If you log in twice within an hour, the newest email is still the
   right one because Gmail sorts newest first.
-- **Manifest V2:** used for a simpler background page. Firefox supports it.
-  Migrating to MV3 later means switching to an event/service worker and
-  `action` instead of `browser_action`.
+- **Manifests:** Firefox uses MV2 (root `manifest.json`); Chrome uses MV3
+  (`build/chrome/manifest.json`). See "Cross-browser build" above.
 - **Security:** the extension reads your Gmail page content and auto-submits a
   login code for your own account. It stores only your login email and settings
   in `browser.storage.local`. No passwords are handled or sent anywhere.
@@ -107,10 +169,14 @@ Temporary add-ons vanish on restart. To keep it:
 
 | File | Role |
 |---|---|
-| `manifest.json` | Extension manifest (MV2) |
-| `config.js` | Default settings + `loadConfig()` |
-| `background.js` | Orchestrates the flow, opens/closes the Gmail tab |
+| `manifest.json` | Firefox manifest (MV2) |
+| `manifest.chrome.json` | Chrome manifest (MV3); renamed to manifest.json by the build |
+| `sw.js` | Chrome service-worker entry (`importScripts` config + background) |
+| `build-chrome.sh` | Assembles `build/chrome/` for Chrome |
+| `config.js` | `browser`/`chrome` shim + default settings + `loadConfig()` |
+| `background.js` | Orchestrates the flow, opens/closes the Gmail tab/window |
 | `content-databricks.js` | Fills email/code and submits on the login page |
+| `content-aws.js` | Expands the AWS account and clicks the role on awsapps.com/start |
 | `gmail-extract.js` | Injected into Gmail; scrapes the code |
 | `options.html` / `options.js` | Settings UI |
 | `popup.html` / `popup.js` | Toolbar button (manual run + options link) |

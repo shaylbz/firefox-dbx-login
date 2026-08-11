@@ -1,13 +1,12 @@
 {
-  "manifest_version": 2,
+  "manifest_version": 3,
   "name": "Definity Auto Login",
   "version": "0.1.0",
   "description": "Automates logins: Databricks email-code (via Gmail) and the AWS access portal account/role.",
 
-  "permissions": [
-    "tabs",
-    "tabHide",
-    "storage",
+  "permissions": ["tabs", "storage", "scripting"],
+
+  "host_permissions": [
     "*://*.databricks.com/*",
     "*://*.azuredatabricks.net/*",
     "*://*.gcp.databricks.com/*",
@@ -16,8 +15,7 @@
   ],
 
   "background": {
-    "scripts": ["config.js", "background.js"],
-    "persistent": true
+    "service_worker": "sw.js"
   },
 
   "content_scripts": [
@@ -44,15 +42,8 @@
     "open_in_tab": true
   },
 
-  "browser_action": {
-    "default_title": "Databricks auto-login",
+  "action": {
+    "default_title": "Definity auto-login",
     "default_popup": "popup.html"
-  },
-
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "definity-auto-login@shay.local",
-      "strict_min_version": "115.0"
-    }
   }
 }

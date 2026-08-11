@@ -1,3 +1,9 @@
+// Cross-browser shim: Chrome exposes `chrome` (with promises on MV3), Firefox
+// exposes `browser`. Alias so the rest of the code can always use `browser`.
+if (typeof globalThis.browser === "undefined" && typeof chrome !== "undefined") {
+  globalThis.browser = chrome;
+}
+
 // Shared default config. Loaded by background, content scripts read via storage.
 // This file defines defaults only; live values live in browser.storage.local.
 
@@ -20,6 +26,13 @@ const DBX_DEFAULTS = {
   // Fill + send automatically when the Databricks login page loads.
   autoStart: true,
 
+  // --- AWS access portal (awsapps.com/start) -------------------------------
+  // The account name to expand and the permission-set (role) to open.
+  awsAccount: "dev-admin",
+  awsRole: "PowerUserAccess",
+  // Auto-run when the AWS access portal loads.
+  awsAutoStart: true,
+
   // Hide the temporary Gmail tab from the tab strip (needs tabHide permission).
   hideGmailTab: true,
 
@@ -28,6 +41,11 @@ const DBX_DEFAULTS = {
 
   // How long to keep polling Gmail for the code before giving up (ms).
   gmailTimeoutMs: 60000,
+
+  // After reading the code, move that Databricks email to Trash (reversible;
+  // recoverable in Gmail's Trash for 30 days). Only the one email that the
+  // code was read from is trashed.
+  trashDbxEmail: true,
 
   // Verbose console logging in all parts of the extension.
   debug: true

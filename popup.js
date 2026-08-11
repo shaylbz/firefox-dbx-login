@@ -1,3 +1,7 @@
+if (typeof globalThis.browser === "undefined" && typeof chrome !== "undefined") {
+  globalThis.browser = chrome;
+}
+
 document.getElementById("run").addEventListener("click", async () => {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (tab) {

@@ -4,8 +4,12 @@ const FIELDS = {
   gmailSearchQuery: "value",
   codeRegex: "value",
   gmailTimeoutMs: "value",
+  awsAccount: "value",
+  awsRole: "value",
+  awsAutoStart: "checked",
   autoStart: "checked",
   hideGmailTab: "checked",
+  trashDbxEmail: "checked",
   showToast: "checked",
   debug: "checked"
 };

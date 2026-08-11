@@ -8,23 +8,73 @@
 //      and sends { type: "gmailCode", code } back to us.
 //   4. We relay the code to the Databricks tab and close the Gmail tab.
 
-let activeFlow = null; // { dbxTabId, gmailTabId, startedAt }
+let activeFlow = null; // { dbxTabId, gmailTabId, gmailWindowId, startedAt }
 
 function log(...args) {
-  console.log("[dbx-bg]", ...args);
+  console.log("[definity-bg]", ...args);
 }
+
+// MV3 (Chrome) uses browser.action; MV2 (Firefox) uses browser.browserAction.
+const badgeAction = browser.action || browser.browserAction;
 
 // Small colored badge on the toolbar icon: "…" waiting, "✓" done, "!" error.
 let badgeClearTimer = null;
 function setBadge(text, color, clearAfterMs) {
-  browser.browserAction.setBadgeText({ text });
-  if (color) browser.browserAction.setBadgeBackgroundColor({ color });
+  if (!badgeAction) return;
+  badgeAction.setBadgeText({ text });
+  if (color) badgeAction.setBadgeBackgroundColor({ color });
   if (badgeClearTimer) clearTimeout(badgeClearTimer);
   if (clearAfterMs) {
     badgeClearTimer = setTimeout(
-      () => browser.browserAction.setBadgeText({ text: "" }),
+      () => badgeAction.setBadgeText({ text: "" }),
       clearAfterMs
     );
+  }
+}
+
+// Open the Gmail page as invisibly as each browser allows.
+// Firefox: an inactive tab hidden with tabs.hide().
+// Chrome (no tabs.hide): a minimized, unfocused popup window.
+async function openGmail(gmailUrl, hide) {
+  if (browser.tabs.hide) {
+    const tab = await browser.tabs.create({ url: gmailUrl, active: false });
+    if (hide) {
+      try {
+        await browser.tabs.hide(tab.id);
+      } catch (e) {
+        log("tabs.hide failed (non-fatal):", e.message);
+      }
+    }
+    return { tabId: tab.id, windowId: null };
+  }
+  if (hide && browser.windows && browser.windows.create) {
+    const win = await browser.windows.create({
+      url: gmailUrl,
+      state: "minimized",
+      focused: false,
+      type: "popup"
+    });
+    const tabId =
+      win.tabs && win.tabs[0]
+        ? win.tabs[0].id
+        : (await browser.tabs.query({ windowId: win.id }))[0].id;
+    return { tabId, windowId: win.id };
+  }
+  const tab = await browser.tabs.create({ url: gmailUrl, active: false });
+  return { tabId: tab.id, windowId: null };
+}
+
+// Inject the scraper. MV3 uses scripting.executeScript (multiple files at
+// once); MV2 uses tabs.executeScript (one file per call).
+async function injectScraper(tabId) {
+  if (browser.scripting && browser.scripting.executeScript) {
+    await browser.scripting.executeScript({
+      target: { tabId },
+      files: ["config.js", "gmail-extract.js"]
+    });
+  } else {
+    await browser.tabs.executeScript(tabId, { file: "config.js" });
+    await browser.tabs.executeScript(tabId, { file: "gmail-extract.js" });
   }
 }
 
@@ -34,7 +84,7 @@ async function startFlow(dbxTabId) {
     return;
   }
   const cfg = await loadConfig();
-  activeFlow = { dbxTabId, gmailTabId: null, startedAt: Date.now() };
+  activeFlow = { dbxTabId, gmailTabId: null, gmailWindowId: null, startedAt: Date.now() };
   log("flow started for dbx tab", dbxTabId);
   setBadge("…", "#d29200");
 
@@ -42,24 +92,14 @@ async function startFlow(dbxTabId) {
   const gmailUrl =
     `https://mail.google.com/mail/u/${cfg.gmailAccountIndex}/#search/${u}`;
 
-  const tab = await browser.tabs.create({ url: gmailUrl, active: false });
-  activeFlow.gmailTabId = tab.id;
-
-  if (cfg.hideGmailTab) {
-    try {
-      await browser.tabs.hide(tab.id);
-    } catch (e) {
-      log("tabs.hide failed (non-fatal):", e.message);
-    }
-  }
+  const { tabId, windowId } = await openGmail(gmailUrl, cfg.hideGmailTab);
+  activeFlow.gmailTabId = tabId;
+  activeFlow.gmailWindowId = windowId;
 
   // Wait for the tab to finish loading, then inject the scraper.
-  await waitForTabComplete(tab.id, 15000);
+  await waitForTabComplete(tabId, 15000);
   try {
-    await browser.tabs.executeScript(tab.id, {
-      code: `window.__DBX_CFG = ${JSON.stringify(cfg)};`
-    });
-    await browser.tabs.executeScript(tab.id, { file: "gmail-extract.js" });
+    await injectScraper(tabId);
     log("injected gmail-extract.js");
   } catch (e) {
     log("injection failed:", e.message);
@@ -91,14 +131,16 @@ function waitForTabComplete(tabId, timeoutMs) {
 
 async function finishFlow() {
   if (!activeFlow) return;
-  const { gmailTabId } = activeFlow;
+  const { gmailTabId, gmailWindowId } = activeFlow;
   activeFlow = null;
-  if (gmailTabId != null) {
-    try {
+  try {
+    if (gmailWindowId != null) {
+      await browser.windows.remove(gmailWindowId);
+    } else if (gmailTabId != null) {
       await browser.tabs.remove(gmailTabId);
-    } catch (e) {
-      log("closing gmail tab failed:", e.message);
     }
+  } catch (e) {
+    log("closing gmail tab/window failed:", e.message);
   }
 }
 
@@ -115,6 +157,11 @@ browser.runtime.onMessage.addListener((msg, sender) => {
   if (msg.type === "startFlow") {
     const tabId = sender.tab ? sender.tab.id : msg.dbxTabId;
     startFlow(tabId);
+    return;
+  }
+
+  if (msg.type === "gmailLog") {
+    console.log("[definity-gmail]", msg.text);
     return;
   }
 
