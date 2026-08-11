@@ -32,6 +32,70 @@ function setBadge(text, color, clearAfterMs) {
   }
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Show/update an on-page status toast in a tab by injecting a self-contained
+// renderer. Driven from the background so it survives page reloads and the
+// final navigation (used for the Definity magic-link flow).
+async function injectToast(tabId, text, state) {
+  if (tabId == null) return;
+  const render = (text, state) => {
+    const id = "dbx-autologin-status";
+    if (!document.getElementById("dbx-autologin-style")) {
+      const s = document.createElement("style");
+      s.id = "dbx-autologin-style";
+      s.textContent =
+        "@keyframes dbx-spin{to{transform:rotate(360deg)}}" +
+        "#dbx-autologin-status{position:fixed;top:16px;right:16px;z-index:2147483647;" +
+        "display:flex;align-items:center;gap:9px;padding:10px 14px;border-radius:10px;" +
+        "font:13px/1.35 system-ui,-apple-system,sans-serif;color:#fff;" +
+        "box-shadow:0 6px 20px rgba(0,0,0,.28);max-width:300px;transition:opacity .35s ease}" +
+        "#dbx-autologin-status .dbx-spin{width:14px;height:14px;border-radius:50%;" +
+        "border:2px solid rgba(255,255,255,.35);border-top-color:#fff;" +
+        "animation:dbx-spin .7s linear infinite;flex:none}" +
+        "#dbx-autologin-status .dbx-ico{font-size:15px;line-height:1;flex:none}";
+      (document.head || document.documentElement).appendChild(s);
+    }
+    let el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = id;
+      (document.body || document.documentElement).appendChild(el);
+    }
+    const bg = { waiting: "#1b2733", success: "#137333", error: "#a50e0e" };
+    el.style.background = bg[state] || bg.waiting;
+    el.style.opacity = "1";
+    const icon =
+      state === "waiting"
+        ? '<span class="dbx-spin"></span>'
+        : state === "success"
+        ? '<span class="dbx-ico">✓</span>'
+        : '<span class="dbx-ico">⚠</span>';
+    el.innerHTML = icon + "<span></span>";
+    el.lastChild.textContent = text;
+    if (state !== "waiting") {
+      setTimeout(() => {
+        if (el) el.style.opacity = "0";
+      }, state === "success" ? 3500 : 7000);
+    }
+  };
+  try {
+    if (browser.scripting && browser.scripting.executeScript) {
+      await browser.scripting.executeScript({
+        target: { tabId },
+        func: render,
+        args: [text, state]
+      });
+    } else {
+      await browser.tabs.executeScript(tabId, {
+        code: `(${render.toString()})(${JSON.stringify(text)},${JSON.stringify(state)})`
+      });
+    }
+  } catch (e) {
+    log("toast inject failed:", e.message);
+  }
+}
+
 // Open the Gmail page as invisibly as each browser allows.
 // Firefox: an inactive tab hidden with tabs.hide().
 // Chrome (no tabs.hide): a minimized, unfocused popup window.
@@ -86,12 +150,19 @@ async function startFlow(dbxTabId, kind) {
   activeFlow = {
     dbxTabId,
     kind,
+    showToast: cfg.showToast !== false,
     gmailTabId: null,
     gmailWindowId: null,
     startedAt: Date.now()
   };
   log(`flow started (${kind}) for tab`, dbxTabId);
   setBadge("…", "#d29200");
+
+  // The Definity login tab may reload on submit and is navigated away at the
+  // end, so drive its "waiting" toast from here (survives reloads).
+  if (kind === "definity" && activeFlow.showToast) {
+    injectToast(dbxTabId, "Waiting for the login email…", "waiting");
+  }
 
   // Per-flow Gmail search + scraper. "definity" extracts a magic link;
   // "databricks" extracts the verification code.
@@ -191,12 +262,21 @@ browser.runtime.onMessage.addListener((msg, sender) => {
     log("received magic link from gmail:", msg.url);
     setBadge("✓", "#137333", 4000);
     const tabId = activeFlow ? activeFlow.dbxTabId : null;
+    const showToast = activeFlow ? activeFlow.showToast : false;
     finishFlow();
-    if (tabId != null) {
-      browser.tabs.update(tabId, { url: msg.url }).catch((e) => {
+    (async () => {
+      if (tabId == null) return;
+      if (showToast) {
+        // Show a success toast briefly before we navigate the tab away.
+        await injectToast(tabId, "Login link received — signing you in…", "success");
+        await sleep(900);
+      }
+      try {
+        await browser.tabs.update(tabId, { url: msg.url });
+      } catch (e) {
         log("navigating to magic link failed:", e.message);
-      });
-    }
+      }
+    })();
     return;
   }
 

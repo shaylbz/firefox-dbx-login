@@ -59,6 +59,55 @@
     return bodies.length ? bodies[bodies.length - 1] : null;
   }
 
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Move a search-result row to Trash via its hover Delete action (reversible).
+  async function trashRow(row) {
+    ["mouseover", "mouseenter", "mousemove"].forEach((type) =>
+      row.dispatchEvent(new MouseEvent(type, { bubbles: true }))
+    );
+    await sleep(200);
+    const findInRow = () => {
+      const btns = Array.from(
+        row.querySelectorAll('[role="button"], [aria-label], [data-tooltip]')
+      );
+      return (
+        btns.find((b) => {
+          const l = (
+            (b.getAttribute("aria-label") || "") +
+            " " +
+            (b.getAttribute("data-tooltip") || "")
+          ).toLowerCase();
+          return l.includes("delete") || l.includes("trash");
+        }) || null
+      );
+    };
+    const btn = await waitFor(findInRow, 2000);
+    if (!btn) {
+      const labels = Array.from(row.querySelectorAll("[aria-label],[data-tooltip]"))
+        .map((b) => b.getAttribute("aria-label") || b.getAttribute("data-tooltip"))
+        .filter(Boolean);
+      log("row action labels:", labels.slice(0, 40).join(" | "));
+      return false;
+    }
+    log("clicking row Delete:", btn.getAttribute("aria-label") || btn.getAttribute("data-tooltip"));
+    btn.click();
+    await sleep(600);
+    return true;
+  }
+
+  // After reading the link we are in the conversation view (no row Delete).
+  // Re-open the results list via the search hash, then delete the top row.
+  async function trashAfterRead() {
+    location.hash = "#search/" + encodeURIComponent(cfg.definitySearchQuery);
+    const row = await waitFor(topResultRow, 6000);
+    if (!row) {
+      log("could not return to the results list to delete.");
+      return false;
+    }
+    return trashRow(row);
+  }
+
   // Gmail rewrites external links to https://www.google.com/url?q=<real>.
   // Return the real target so navigation skips Google's redirect.
   function unwrap(href) {
@@ -107,6 +156,13 @@
       log("body text was:", (body.innerText || "").slice(0, 300));
       return fail("no login link found in the email body.");
     }
+
+    // Optionally move the login email to Trash (reversible).
+    if (cfg.trashDbxEmail) {
+      const trashed = await trashAfterRead();
+      log(trashed ? "email moved to Trash." : "could not delete; left the email.");
+    }
+
     succeed(url);
   }
 
