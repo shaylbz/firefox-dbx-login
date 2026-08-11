@@ -26,6 +26,12 @@ const DBX_DEFAULTS = {
   // Fill + send automatically when the Databricks login page loads.
   autoStart: true,
 
+  // --- Definity app magic-link login (Chrome only) -------------------------
+  // Email to type into the definity.run login form. Falls back to `email`.
+  definityEmail: "",
+  // Gmail search for the magic-link email. Newest match is used.
+  definitySearchQuery: "from:no-reply@definity.ai Login newer_than:1h",
+
   // --- AWS access portal (awsapps.com/start) -------------------------------
   // The account name to expand and the permission-set (role) to open.
   awsAccount: "dev-admin",

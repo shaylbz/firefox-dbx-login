@@ -52,6 +52,16 @@
     <label for="awsAutoStart">Auto-run when the AWS access portal loads</label>
   </div>
 
+  <h1 style="font-size:15px;margin-top:28px;">Definity app (Chrome only)</h1>
+
+  <label for="definityEmail">Definity login email</label>
+  <input type="text" id="definityEmail" placeholder="(blank = use Login email above)">
+  <div class="hint">Email for app.definity.run/login. Blank falls back to the Login email.</div>
+
+  <label for="definitySearchQuery">Definity email search query</label>
+  <input type="text" id="definitySearchQuery">
+  <div class="hint">Finds the magic-link email; the login link in it is opened.</div>
+
   <div class="row">
     <input type="checkbox" id="autoStart">
     <label for="autoStart">Auto-run when the Databricks login page loads</label>

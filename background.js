@@ -64,31 +64,43 @@ async function openGmail(gmailUrl, hide) {
   return { tabId: tab.id, windowId: null };
 }
 
-// Inject the scraper. MV3 uses scripting.executeScript (multiple files at
-// once); MV2 uses tabs.executeScript (one file per call).
-async function injectScraper(tabId) {
+// Inject a scraper. MV3 uses scripting.executeScript (multiple files at once);
+// MV2 uses tabs.executeScript (one file per call).
+async function injectScraper(tabId, files) {
   if (browser.scripting && browser.scripting.executeScript) {
-    await browser.scripting.executeScript({
-      target: { tabId },
-      files: ["config.js", "gmail-extract.js"]
-    });
+    await browser.scripting.executeScript({ target: { tabId }, files });
   } else {
-    await browser.tabs.executeScript(tabId, { file: "config.js" });
-    await browser.tabs.executeScript(tabId, { file: "gmail-extract.js" });
+    for (const file of files) {
+      await browser.tabs.executeScript(tabId, { file });
+    }
   }
 }
 
-async function startFlow(dbxTabId) {
+async function startFlow(dbxTabId, kind) {
   if (activeFlow) {
     log("flow already active, ignoring new start");
     return;
   }
+  kind = kind || "databricks";
   const cfg = await loadConfig();
-  activeFlow = { dbxTabId, gmailTabId: null, gmailWindowId: null, startedAt: Date.now() };
-  log("flow started for dbx tab", dbxTabId);
+  activeFlow = {
+    dbxTabId,
+    kind,
+    gmailTabId: null,
+    gmailWindowId: null,
+    startedAt: Date.now()
+  };
+  log(`flow started (${kind}) for tab`, dbxTabId);
   setBadge("…", "#d29200");
 
-  const u = encodeURIComponent(cfg.gmailSearchQuery);
+  // Per-flow Gmail search + scraper. "definity" extracts a magic link;
+  // "databricks" extracts the verification code.
+  const searchQuery =
+    kind === "definity" ? cfg.definitySearchQuery : cfg.gmailSearchQuery;
+  const scraper =
+    kind === "definity" ? "gmail-link-extract.js" : "gmail-extract.js";
+
+  const u = encodeURIComponent(searchQuery);
   const gmailUrl =
     `https://mail.google.com/mail/u/${cfg.gmailAccountIndex}/#search/${u}`;
 
@@ -99,8 +111,8 @@ async function startFlow(dbxTabId) {
   // Wait for the tab to finish loading, then inject the scraper.
   await waitForTabComplete(tabId, 15000);
   try {
-    await injectScraper(tabId);
-    log("injected gmail-extract.js");
+    await injectScraper(tabId, ["config.js", scraper]);
+    log("injected", scraper);
   } catch (e) {
     log("injection failed:", e.message);
     await finishFlow();
@@ -156,7 +168,7 @@ browser.runtime.onMessage.addListener((msg, sender) => {
 
   if (msg.type === "startFlow") {
     const tabId = sender.tab ? sender.tab.id : msg.dbxTabId;
-    startFlow(tabId);
+    startFlow(tabId, msg.kind);
     return;
   }
 
@@ -172,6 +184,19 @@ browser.runtime.onMessage.addListener((msg, sender) => {
     browser.storage.local.set({ pendingCode: msg.code, pendingCodeTs: Date.now() });
     notifyDbx({ type: "fillCode", code: msg.code });
     finishFlow();
+    return;
+  }
+
+  if (msg.type === "gmailLink") {
+    log("received magic link from gmail:", msg.url);
+    setBadge("✓", "#137333", 4000);
+    const tabId = activeFlow ? activeFlow.dbxTabId : null;
+    finishFlow();
+    if (tabId != null) {
+      browser.tabs.update(tabId, { url: msg.url }).catch((e) => {
+        log("navigating to magic link failed:", e.message);
+      });
+    }
     return;
   }
 

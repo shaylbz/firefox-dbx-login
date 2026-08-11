@@ -11,6 +11,8 @@
     "*://*.azuredatabricks.net/*",
     "*://*.gcp.databricks.com/*",
     "*://*.awsapps.com/*",
+    "*://app.definity.run/*",
+    "*://dev.definity.run/*",
     "*://mail.google.com/*"
   ],
 
@@ -32,6 +34,12 @@
     {
       "matches": ["*://*.awsapps.com/*"],
       "js": ["config.js", "content-aws.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": ["*://app.definity.run/login*", "*://dev.definity.run/login*"],
+      "js": ["config.js", "content-definity.js"],
       "run_at": "document_idle",
       "all_frames": false
     }

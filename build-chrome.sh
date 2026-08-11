@@ -11,7 +11,8 @@ mkdir -p "$OUT"
 
 # Shared logic + UI (identical across browsers).
 cp config.js background.js sw.js \
-   content-databricks.js content-aws.js gmail-extract.js \
+   content-databricks.js content-aws.js content-definity.js \
+   gmail-extract.js gmail-link-extract.js \
    options.html options.js popup.html popup.js \
    "$OUT"/
 

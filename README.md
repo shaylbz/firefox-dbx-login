@@ -105,6 +105,25 @@ access portal it expands a configured account and clicks a configured role
   React app with no stable ids. If a step fails, the console (`[definity-aws]`) logs
   the clickable candidates so you can correct the text in options.
 
+## Definity app magic-link login (Chrome only)
+
+Automates the magic-link login for Definity's own app
+(`app.definity.run/login` and `dev.definity.run/login`). Wired only in the
+Chrome manifest, so it does nothing in Firefox.
+
+Flow:
+1. `content-definity.js` fills your email and clicks the login button.
+2. The background opens Gmail and injects `gmail-link-extract.js`, which finds
+   the newest email matching `from:no-reply@definity.ai Login` and reads the
+   login link out of the message body (unwrapping Gmail's `google.com/url`
+   redirect).
+3. The background navigates your login tab straight to that link, signing you
+   in.
+
+Options (Chrome): **Definity login email** (blank falls back to the Databricks
+Login email) and **Definity email search query**. Same Gmail prerequisite —
+you must be signed into Gmail in the Chrome profile.
+
 ## Status indicators
 
 While the flow runs you get two forms of feedback:
@@ -178,6 +197,8 @@ Temporary add-ons vanish on restart. To keep it:
 | `content-databricks.js` | Fills email/code and submits on the login page |
 | `content-aws.js` | Expands the AWS account and clicks the role on awsapps.com/start |
 | `gmail-extract.js` | Injected into Gmail; scrapes the code |
+| `gmail-link-extract.js` | Injected into Gmail; scrapes the Definity magic link |
+| `content-definity.js` | Definity app login (Chrome only); fills email, triggers link flow |
 | `options.html` / `options.js` | Settings UI |
 | `popup.html` / `popup.js` | Toolbar button (manual run + options link) |
 # firefox-dbx-login

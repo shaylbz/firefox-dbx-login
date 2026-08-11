@@ -7,6 +7,8 @@ const FIELDS = {
   awsAccount: "value",
   awsRole: "value",
   awsAutoStart: "checked",
+  definityEmail: "value",
+  definitySearchQuery: "value",
   autoStart: "checked",
   hideGmailTab: "checked",
   trashDbxEmail: "checked",
