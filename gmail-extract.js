@@ -1,5 +1,5 @@
-// Injected by background.js into the hidden Gmail tab (alongside config.js).
-// Reads its config via loadConfig() from browser.storage.
+// Injected by background.js into the hidden Gmail tab. Self-contained: reads
+// its config directly from browser.storage (no config.js dependency).
 //
 // Strategy:
 //   1. Wait for the search result rows to render.
@@ -12,9 +12,28 @@
 // was found so you can adjust the selectors if needed.
 
 (function () {
+  // Cross-browser alias (Chrome exposes `chrome`, not `browser`).
+  if (typeof globalThis.browser === "undefined" && typeof chrome !== "undefined") {
+    globalThis.browser = chrome;
+  }
+
   let cfg = {};
   let timeoutMs = 60000;
   let codeRe = /\b(\d{6})\b/;
+
+  // Read config directly from storage. Self-contained so this file does not
+  // depend on config.js being injected first (unreliable across executeScript
+  // calls on Firefox).
+  function localConfig() {
+    return browser.storage.local.get({
+      gmailSearchQuery: "from:databricks newer_than:1h",
+      codeRegex: "\\b(\\d{6})\\b",
+      gmailTimeoutMs: 60000,
+      trashDbxEmail: true,
+      flowStartTs: 0,
+      debug: true
+    });
+  }
 
   function log(...args) {
     if (cfg.debug) console.log("[definity-gmail]", ...args);
@@ -61,6 +80,63 @@
     // .zA is a Gmail conversation row. First one is the newest match.
     const rows = document.querySelectorAll("tr.zA, div[role='main'] tr.zA");
     return rows.length ? rows[0] : null;
+  }
+
+  // Parse a row's received time from its date span[title] (a full date string).
+  function rowTimestamp(row) {
+    for (const s of row.querySelectorAll("[title]")) {
+      const t = Date.parse(s.getAttribute("title"));
+      if (!isNaN(t)) return t;
+    }
+    return null;
+  }
+
+  // Click Gmail's Refresh button so new mail shows without reloading the tab.
+  function clickRefresh() {
+    let btn =
+      document.querySelector('[aria-label="Refresh"]') ||
+      document.querySelector('[data-tooltip="Refresh"]');
+    if (!btn) {
+      btn = Array.from(document.querySelectorAll('[role="button"], button')).find(
+        (b) => {
+          const l = (
+            (b.getAttribute("aria-label") || "") +
+            " " +
+            (b.getAttribute("data-tooltip") || "")
+          ).toLowerCase();
+          return l.includes("refresh");
+        }
+      );
+    }
+    if (btn) btn.click();
+  }
+
+  // Wait for the newest matching email that arrived AFTER this login started.
+  // Rejects an older email (e.g. a code from a previous session) and keeps
+  // refreshing until the fresh one shows up.
+  async function waitForFreshRow() {
+    // Emails should be dated after the flow start; allow slack for clock skew.
+    const threshold = (cfg.flowStartTs || 0) - 120000;
+    const start = Date.now();
+    let warnedNoTs = false;
+    while (Date.now() - start < timeoutMs) {
+      const row = topResultRow();
+      if (row) {
+        const ts = rowTimestamp(row);
+        if (ts == null) {
+          if (!warnedNoTs) {
+            warnedNoTs = true;
+            log("could not read email timestamp; accepting top row.");
+          }
+          return row; // Degrade to old behavior rather than deadlock.
+        }
+        if (ts >= threshold) return row;
+        log("top email is older than this login; waiting for a newer one.");
+      }
+      clickRefresh();
+      await sleep(2500);
+    }
+    return null;
   }
 
   function messageBodyText() {
@@ -196,10 +272,10 @@
   async function run() {
     log("scraper started; search =", cfg.gmailSearchQuery);
 
-    // 1. Wait for a matching result row.
-    const row = await waitFor(topResultRow, timeoutMs);
+    // 1. Wait for a matching email that arrived after this login started.
+    const row = await waitForFreshRow();
     if (!row) {
-      return fail("no matching email appeared within the timeout.");
+      return fail("no fresh email arrived within the timeout.");
     }
 
     // 2. Read the code from the subject/snippet — the reliable source.
@@ -241,7 +317,7 @@
   }
 
   (async () => {
-    cfg = await loadConfig();
+    cfg = await localConfig();
     timeoutMs = cfg.gmailTimeoutMs || 60000;
     codeRe = new RegExp(cfg.codeRegex || "\\b(\\d{6})\\b");
     run();

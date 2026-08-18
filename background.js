@@ -131,12 +131,13 @@ async function openGmail(gmailUrl, hide) {
 // Inject a scraper. MV3 uses scripting.executeScript (multiple files at once);
 // MV2 uses tabs.executeScript (one file per call).
 async function injectScraper(tabId, files) {
-  if (browser.scripting && browser.scripting.executeScript) {
-    await browser.scripting.executeScript({ target: { tabId }, files });
-  } else {
+  // Firefox MV2 has tabs.executeScript; Chrome MV3 removed it and uses scripting.
+  if (browser.tabs && browser.tabs.executeScript) {
     for (const file of files) {
       await browser.tabs.executeScript(tabId, { file });
     }
+  } else {
+    await browser.scripting.executeScript({ target: { tabId }, files });
   }
 }
 
@@ -157,6 +158,9 @@ async function startFlow(dbxTabId, kind) {
   };
   log(`flow started (${kind}) for tab`, dbxTabId);
   setBadge("…", "#d29200");
+
+  // Record when this login started so the scraper can reject an older email.
+  await browser.storage.local.set({ flowStartTs: activeFlow.startedAt });
 
   // The Definity login tab may reload on submit and is navigated away at the
   // end, so drive its "waiting" toast from here (survives reloads).
@@ -182,7 +186,7 @@ async function startFlow(dbxTabId, kind) {
   // Wait for the tab to finish loading, then inject the scraper.
   await waitForTabComplete(tabId, 15000);
   try {
-    await injectScraper(tabId, ["config.js", scraper]);
+    await injectScraper(tabId, [scraper]);
     log("injected", scraper);
   } catch (e) {
     log("injection failed:", e.message);

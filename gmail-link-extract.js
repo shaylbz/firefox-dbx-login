@@ -6,8 +6,24 @@
 // body). Logs are forwarded to the background console.
 
 (function () {
+  // Cross-browser alias (Chrome exposes `chrome`, not `browser`).
+  if (typeof globalThis.browser === "undefined" && typeof chrome !== "undefined") {
+    globalThis.browser = chrome;
+  }
+
   let cfg = {};
   let timeoutMs = 60000;
+
+  // Read config directly from storage; self-contained (see gmail-extract.js).
+  function localConfig() {
+    return browser.storage.local.get({
+      definitySearchQuery: "from:no-reply@definity.ai Login newer_than:1h",
+      gmailTimeoutMs: 60000,
+      trashDbxEmail: true,
+      flowStartTs: 0,
+      debug: true
+    });
+  }
 
   function log(...args) {
     if (cfg.debug) console.log("[definity-gmail-link]", ...args);
@@ -60,6 +76,59 @@
   }
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function rowTimestamp(row) {
+    for (const s of row.querySelectorAll("[title]")) {
+      const t = Date.parse(s.getAttribute("title"));
+      if (!isNaN(t)) return t;
+    }
+    return null;
+  }
+
+  function clickRefresh() {
+    let btn =
+      document.querySelector('[aria-label="Refresh"]') ||
+      document.querySelector('[data-tooltip="Refresh"]');
+    if (!btn) {
+      btn = Array.from(document.querySelectorAll('[role="button"], button')).find(
+        (b) => {
+          const l = (
+            (b.getAttribute("aria-label") || "") +
+            " " +
+            (b.getAttribute("data-tooltip") || "")
+          ).toLowerCase();
+          return l.includes("refresh");
+        }
+      );
+    }
+    if (btn) btn.click();
+  }
+
+  // Wait for the newest matching email that arrived AFTER this login started,
+  // refreshing until it shows up (rejects an older magic-link email).
+  async function waitForFreshRow() {
+    const threshold = (cfg.flowStartTs || 0) - 120000;
+    const start = Date.now();
+    let warnedNoTs = false;
+    while (Date.now() - start < timeoutMs) {
+      const row = topResultRow();
+      if (row) {
+        const ts = rowTimestamp(row);
+        if (ts == null) {
+          if (!warnedNoTs) {
+            warnedNoTs = true;
+            log("could not read email timestamp; accepting top row.");
+          }
+          return row;
+        }
+        if (ts >= threshold) return row;
+        log("top email is older than this login; waiting for a newer one.");
+      }
+      clickRefresh();
+      await sleep(2500);
+    }
+    return null;
+  }
 
   // Move a search-result row to Trash via its hover Delete action (reversible).
   async function trashRow(row) {
@@ -141,8 +210,8 @@
   async function run() {
     log("link scraper started; search =", cfg.definitySearchQuery);
 
-    const row = await waitFor(topResultRow, timeoutMs);
-    if (!row) return fail("no matching email appeared within the timeout.");
+    const row = await waitForFreshRow();
+    if (!row) return fail("no fresh email arrived within the timeout.");
 
     log("opening the email.");
     row.click();
@@ -167,7 +236,7 @@
   }
 
   (async () => {
-    cfg = await loadConfig();
+    cfg = await localConfig();
     timeoutMs = cfg.gmailTimeoutMs || 60000;
     run();
   })();
