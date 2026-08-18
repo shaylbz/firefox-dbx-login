@@ -31,6 +31,13 @@ const DBX_DEFAULTS = {
   definityEmail: "",
   // Gmail search for the magic-link email. Newest match is used.
   definitySearchQuery: "from:no-reply@definity.ai Login newer_than:1h",
+  // Tenants shown in the popup "Impersonate" menu on definity.run.
+  impersonateTenants: [
+    { name: "grammarly.com", id: 29 },
+    { name: "pubmatic.com", id: 63 },
+    { name: "vitality.com", id: 61 },
+    { name: "nexxen.com", id: 3 }
+  ],
 
   // --- AWS access portal (awsapps.com/start) -------------------------------
   // The account name to expand and the permission-set (role) to open.
