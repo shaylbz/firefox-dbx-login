@@ -36,7 +36,8 @@
   }
 
   function log(...args) {
-    if (cfg.debug) console.log("[definity-gmail]", ...args);
+    const ts = new Date().toTimeString().slice(0, 8);
+    if (cfg.debug) console.log(`[${ts}][definity-gmail]`, ...args);
     // Forward to the background console, which stays open (this tab closes fast).
     try {
       browser.runtime.sendMessage({

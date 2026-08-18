@@ -2,6 +2,15 @@ if (typeof globalThis.browser === "undefined" && typeof chrome !== "undefined") 
   globalThis.browser = chrome;
 }
 
+// Auto-close after 10s of inactivity; any interaction resets the timer.
+let _closeTimer = setTimeout(() => window.close(), 10000);
+["click", "mousemove", "keydown"].forEach((evt) =>
+  document.addEventListener(evt, () => {
+    clearTimeout(_closeTimer);
+    _closeTimer = setTimeout(() => window.close(), 10000);
+  })
+);
+
 document.getElementById("run").addEventListener("click", async () => {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (tab) {

@@ -5,7 +5,8 @@
 
 (function () {
   function log(...args) {
-    console.log("[definity-databricks]", ...args);
+    const ts = new Date().toTimeString().slice(0, 8);
+    console.log(`[${ts}][definity-databricks]`, ...args);
   }
 
   // --- status toast --------------------------------------------------------

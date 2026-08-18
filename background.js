@@ -11,7 +11,8 @@
 let activeFlow = null; // { dbxTabId, gmailTabId, gmailWindowId, startedAt }
 
 function log(...args) {
-  console.log("[definity-bg]", ...args);
+  const ts = new Date().toTimeString().slice(0, 8);
+  console.log(`[${ts}][definity-bg]`, ...args);
 }
 
 // MV3 (Chrome) uses browser.action; MV2 (Firefox) uses browser.browserAction.
@@ -291,4 +292,5 @@ browser.runtime.onMessage.addListener((msg, sender) => {
     finishFlow();
     return;
   }
+
 });

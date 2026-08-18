@@ -8,7 +8,8 @@
 
 (function () {
   function log(...args) {
-    console.log("[definity-aws]", ...args);
+    const ts = new Date().toTimeString().slice(0, 8);
+    console.log(`[${ts}][definity-aws]`, ...args);
   }
 
   // --- status toast (self-contained; mirrors the Databricks one) -----------
@@ -177,7 +178,14 @@
 
     const roleVisible = () => {
       const e = findByText(role);
-      return e && visible(e) ? e : null;
+      if (!e || !visible(e)) return null;
+      // findByText may return a wrapper div; resolve to the actual <a> link.
+      if (e.tagName === "A") return e;
+      const child = e.querySelector("a");
+      if (child && visible(child)) return child;
+      const parent = e.closest && e.closest("a");
+      if (parent && visible(parent)) return parent;
+      return e;
     };
 
     // If the role is already visible (account already expanded), use it.
@@ -201,7 +209,7 @@
         const target = clickableAncestor(c);
         log("clicking account target:", (target.innerText || "").trim().slice(0, 50));
         target.click();
-        roleEl = await waitFor(roleVisible, 4000);
+        roleEl = await waitFor(roleVisible, 1500);
         if (roleEl) break;
       }
 
@@ -215,9 +223,8 @@
     }
 
     log("clicking role:", (roleEl.innerText || roleEl.textContent || "").trim());
-    await sleep(150);
-    roleEl.click();
     showStatus(`Opening ${role}…`, "success");
+    window.location.href = roleEl.href;
     running = false;
   }
 
@@ -231,8 +238,7 @@
   loadConfig().then((cfg) => {
     toastEnabled = cfg.showToast !== false;
     if (cfg.awsAutoStart !== false) {
-      // Delay so the account list (loaded via API) has time to render.
-      setTimeout(() => run(cfg), 1200);
+      setTimeout(() => run(cfg), 400);
     }
   });
 })();

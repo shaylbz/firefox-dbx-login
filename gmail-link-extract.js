@@ -26,7 +26,8 @@
   }
 
   function log(...args) {
-    if (cfg.debug) console.log("[definity-gmail-link]", ...args);
+    const ts = new Date().toTimeString().slice(0, 8);
+    if (cfg.debug) console.log(`[${ts}][definity-gmail-link]`, ...args);
     try {
       browser.runtime.sendMessage({
         type: "gmailLog",

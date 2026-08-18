@@ -4,7 +4,8 @@
 
 (function () {
   function log(...args) {
-    console.log("[definity-app]", ...args);
+    const ts = new Date().toTimeString().slice(0, 8);
+    console.log(`[${ts}][definity-app]`, ...args);
   }
 
   // --- status toast (self-contained; mirrors the other content scripts) ----
